@@ -50,7 +50,8 @@ HEADERS += mainwindow.h \
     data.h \
     Dialog/serverdialog.h \
     receivefromweb.h \
-    qcustomplot.h
+    qcustomplot.h \
+    qtmosq.h
 FORMS += mainwindow.ui \
     Dialog/retasksensordialog.ui \
     Dialog/retskalldialog.ui \
@@ -62,6 +63,8 @@ FORMS += mainwindow.ui \
     Dialog/aboutdialog.ui \
     Dialog/serverdialog.ui
 include(qextserialport/qextserialport.pri)
+LIBS += -lmosquittopp
+LIBS += -lmosquitto
 RESOURCES += resources.qrc
 OTHER_FILES += html_js/tools.js \
     html_js/init.js \

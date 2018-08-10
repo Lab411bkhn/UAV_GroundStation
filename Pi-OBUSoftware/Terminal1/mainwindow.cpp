@@ -18,6 +18,9 @@
 #include "QPrintDialog"
 #include "QPrinter"
 #include "QTextCursor"
+#include "qtmosq.h"
+//#include <QDateTime>
+
 
 class WebPage : public QWebPage
 {
@@ -58,7 +61,9 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(thread_receivefromweb,SIGNAL(started()),web,SLOT(doWork_web()));
     connect(web, SIGNAL(Workrequest(QString)), this ,SLOT(GetDataWeb()));
     qDebug()<< "thread start";
-    connect(this,SIGNAL(readySend()),SLOT(sendtoWeb()));
+    //nxt cmt
+    //connect(this,SIGNAL(readySend()),SLOT(sendtoWeb()));
+    //connect(this,SIGNAL(readySend()),SLOT(sendMqtt()));
 
     // GPS
 
@@ -88,6 +93,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(tranceiver, SIGNAL(ImageReceived(QString)), SLOT(onImageReceived(QString)));
     connect(ui->btnOpenClose, SIGNAL(clicked()), SLOT(onOpenCloseButtonClicked()));
     connect(tranceiver, SIGNAL(tempAndHum(QString)), SLOT(onTempAndHum(QString)));
+    connect(tranceiver,SIGNAL(sendTandH(int,double,double)),SLOT(sendMqttTandH(int,double,double)));
 
     //Tab Map
     ui->webView->setPage( new QWebPage() );
@@ -114,23 +120,41 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->btDraw,SIGNAL(clicked()),this,SLOT(makePlot()));
 
     connect(ui->bt_Broadcast, SIGNAL(clicked()), SLOT(sendBroadcast()));
+    //nxt cmt
+    connect(ui->bt_Broadcast, SIGNAL(clicked()), SLOT(sendtoWeb()));
+
     connect(ui->btnShowVector, SIGNAL(clicked()), this, SLOT(onOptimizeMove()));
 
     setWindowTitle(tr("Patrolling Software by LAB411 "));
 
-    SetupSerialPort();
-    //populateJavaScriptWindowObject();
+    //SetupSerialPort(); //Open dialog config Port cho Emboard va GPS khi mois chay chuong trinh
+    populateJavaScriptWindowObject();
     setDate();
-    /******* Chinh sua code cho UAV    *******/
-//    fileName = "/home/lab411/Desktop/LogfileUAV/logfile_" + QTime::currentTime().toString();
-//    AlwaysOpenPort();
-//    SetupPortSerial();
-//    UAVautoSend = new QTimer();
-//    UAVautoSend->start(30000);
+
+    //<Chinh sua code cho UAV>
+
+    /*
+     * thiet dat thoi gian time_out cho UAV gui lenh lay du lieu
+     */
+
+    int time_out = 30000;
+    fileName = "/home/lab411/Desktop/LogfileUAV/logfile_" + QDate::currentDate().toString() + "_" + QTime::currentTime().toString();
+    AlwaysOpenPort();
+    SetupPortSerial();
+    UAVautoSend = new QTimer(); // creat timer object
+    UAVautoSend->start(time_out);// value time out
 //    connect(UAVautoSend, SIGNAL(timeout()), this, SLOT(sendBroadcast()));
-    /***********************************/
+
+//    </Chinh sua code cho UAV>
+    lib_init();
+    mqttConnect();
     qDebug()<<"okoko";
 }
+
+/*
+ * Ham ghi du lieu thu thap duoc vao file txt. Luu o thu muc ~/Desktop/LogfileUAV
+ * Duoc su dung tai cac ham onNodeJoin, onTempAndHum, ~MainWindow
+ */
 void MainWindow::WriteDatatoLogfile(QString data)
 {
     QFile file(fileName);
@@ -142,7 +166,12 @@ void MainWindow::WriteDatatoLogfile(QString data)
 
 MainWindow::~MainWindow()
 {
-    //WriteDatatoLogfile("\n---------------End File----------");
+    //khi dong chuong trinh. Ket thuc ghi file
+    WriteDatatoLogfile("\n---------------End File----------");
+    mosq->mosquittopp::disconnect();
+    mosq->loop_stop();
+    lib_cleanup();
+    delete mosq;
     delete ui;
 }
 
@@ -158,6 +187,73 @@ void MainWindow::changeEvent(QEvent *e)
     }
 }
 
+/* nxt code
+ * auto connect mqtt
+ *
+*/
+void MainWindow::mqttConnect(){
+   // qDebug()<<"mqtt!!"<<endl;
+    mosq=new qtmosq();
+    //thingsboard
+//    mosq->username_pw_set("vFxbwpQ04fzVqrxnxihI",NULL);
+
+    //mqttcloud
+    mosq->username_pw_set("nc9aSPqyN2pEsZ7tGQXO");
+
+    connect (mosq, SIGNAL(connected()), this, SLOT(connectEnabled()));
+    mosq->connect_async(hostMqtt,portMqtt);
+    mosq->loop_start();
+
+    //qDebug()<<"end";
+}
+void MainWindow::connectEnabled(){
+    console->insertPlainText("khoi tao mqtt thanh cong!!");
+}
+void MainWindow::sendMqtt(){
+    QString payload = "{";
+//    payload += "\"serialNumber\":\""; payload += serialNumber; payload += "\",";
+//    payload += "\"temperature\":"; payload += temperature; payload += ",";
+//    payload += "\"model\":\""; payload += model;
+    payload += "\"}";
+    QByteArray datasend=payload.toLocal8Bit();
+    QByteArray topic="sensors";
+    mosq->publish(mosq->getMID(),topic.data(),datasend.size(),datasend.data(),2,false);
+    console->insertPlainText("vua gui du lieu server!!");
+}
+
+void MainWindow::sendMqttTandH(int mac,double temp,double humi)
+{
+    QString model="T1000";
+    QString name="P1-SN-0";
+    name.append(QString::number(mac));
+    //qDebug()<<name;
+    //nxt sua
+    QDateTime current = QDateTime::currentDateTime();
+    uint timestame = current.toTime_t();
+   // qDebug()<<timestame;
+    QString payload = "{\"";
+    payload +=name;
+    payload +="\": [{\"ts\":";
+    payload +=QString::number(timestame);payload+="000,\"values\":";
+    payload += "{\"temperature\":"; payload += QString::number(temp); payload += ",";
+    payload += "\"humidity\":"; payload += QString::number(humi);
+    payload += "}}]}";
+
+/*using tb-gateway*/
+//    QString payload="{";
+//        payload += "\"serialNumber\":\""; payload +=name ; payload += "\",";
+//        payload += "\"temperature\":"; payload += QString::number(temp); payload += ",";
+//        payload += "\"humidity\":"; payload += QString::number(humi); payload += ",";
+//        payload += "\"model\":\""; payload += model;
+//    payload+="\"}";
+
+//    qDebug()<<payload<<endl;
+    QByteArray datasend=payload.toLocal8Bit();
+    QByteArray topic="v1/gateway/telemetry";
+    mosq->publish(mosq->getMID(),topic.data(),datasend.size(),datasend.data(),2,false);
+    console->insertPlainText("vua gui du lieu server!!");
+}
+//end code mqtt
 void MainWindow::loadHtmlPage()
 {
     QFile htmlFile(":/html/index.html");
@@ -264,13 +360,13 @@ void MainWindow::initListSensor()
         //qDebug() << ListSensor[i]->x0 << " *** " << ListSensor[i]->y0;
         //qDebug() << "Sensor "  << ListSensor[i]->isJoin;
     }
-    //QString lat_test, lng_test;
+//    QString lat_test, lng_test;
 //    findLastPoint(lat_test, lng_test, 53.32055556, 1.7297222, 124800, 1.675894237 );
 //    qDebug() << "Test: " << lat_test << " *** " << lng_test ;
-    //double dis_test = distance(ListSensor[0]->lat.toDouble(), ListSensor[0]->lng.toDouble(), ListSensor[1]->lat.toDouble(), ListSensor[1]->lng.toDouble());
-    //findLastPoint(lat_test, lng_test, ListSensor[0]->lat.toDouble(), ListSensor[0]->lng.toDouble(), dis_test, ListSensorArg[1]);
-    //qDebug() << "Test: " << lat_test << " *** " << lng_test ;
-   // ClearMap();
+//    double dis_test = distance(ListSensor[0]->lat.toDouble(), ListSensor[0]->lng.toDouble(), ListSensor[1]->lat.toDouble(), ListSensor[1]->lng.toDouble());
+//    findLastPoint(lat_test, lng_test, ListSensor[0]->lat.toDouble(), ListSensor[0]->lng.toDouble(), dis_test, ListSensorArg[1]);
+//    qDebug() << "Test: " << lat_test << " *** " << lng_test ;
+//    ClearMap();
 }
 
 void MainWindow::updateListSensor()
@@ -360,7 +456,7 @@ QString MainWindow::getIp(int mac)
     int N = ListSensor.length();
     for(int i = 0; i < N; i++)
     {
-        if(ListSensor[i]->mac == mac) return ListSensor[i]->ip;
+        if(ListSensor[i]->mac == mac) {qDebug()<<"ip ne::"<<ListSensor[i]->ip<<endl; return ListSensor[i]->ip;}
     }
     return "";
 }
@@ -381,12 +477,16 @@ void MainWindow::sendCommand(int mac, int cmd)
     case 0: // Take temperature and humidity
         if(mac < 10){
             DATA::mac = "0" + QString::number(mac);
+           // qDebug()<< "mac send data :" <<DATA::mac<<endl;
         }
         else{
             DATA::mac = QString::number(mac);
         }
         DATA::Ip = Ip;
+        qDebug()<<"cmd truoc:"<<Cmd<<endl;
         Cmd += "000$";
+        qDebug()<<"ip data:"<<DATA::Ip<<endl;
+        qDebug()<<"cmd data:"<<Cmd<<endl;
         break;
 
     case 1: // Take photo
@@ -449,6 +549,7 @@ void MainWindow::sendCommand(int mac, int cmd)
     }
 
     if(Cmd.length() > 4) {
+        qDebug()<<"vao duoc roi"<<endl;
         tranceiver->writeData(Cmd);
         QString tmp = "Gui ma lenh " + Cmd + "\n";
         console->insertPlainText(tmp);
@@ -535,8 +636,8 @@ void MainWindow::onNodeJoin(int mac, QString address)
 {
     //console->insertPlainText("Node Join!!!!\n");
     FileData file(DATA_PATH);
-    QString tmp = "Node " + QString::number(mac) + " gia nhap voi dia chi mang " + address + "\n";
-    //WriteDatatoLogfile(tmp);
+    QString tmp = "["+QTime::currentTime().toString() + "] "+"Node " + QString::number(mac) + " gia nhap voi dia chi mang " + address + "\n";
+    WriteDatatoLogfile(tmp);
     console->insertPlainText(tmp);
     //if(!checkJoin(mac)){
         tmp = "Node " + QString::number(mac);
@@ -683,7 +784,7 @@ void MainWindow::onTempAndHum(QString data)
     int index  = getIndexMarker(mac.toInt());
     ListSensor[index]->cur_temp = data_lst.value(2).toDouble();
 
-    tmp = "\nThong tin nhiet do, do am tu sensor ";
+    tmp = "\n["+QTime::currentTime().toString()+"] " +"Thong tin nhiet do, do am tu sensor ";
     tmp += data_lst.value(0);
     tmp += ", dia chi Ip ";
     tmp += data_lst.value(1);
@@ -692,7 +793,8 @@ void MainWindow::onTempAndHum(QString data)
     tmp += "\nDo am:           ";
     tmp += data_lst.value(3);
     tmp += "\n";
-    //WriteDatatoLogfile(tmp);
+
+    WriteDatatoLogfile(tmp);
     console->insertPlainText(tmp + "\n");
 
     //    QString line = file.readLine(index+1);
@@ -703,7 +805,9 @@ void MainWindow::onTempAndHum(QString data)
 //    qDebug() << QTime::currentTime() << movDetectTime.value(mac);
 //    removeAllMarkers();
 //    ListSensor.clear();
-    updateListSensor();
+
+//    nxt cmt
+    //updateListSensor();
 
 
 //    QString lat_test, lng_test;
@@ -844,6 +948,10 @@ void MainWindow::StartupLocation()
         zoomMap(zm);
     }
 }
+
+/*
+ * tu dong mo Port ket noi den Sensor, va GPS
+ */
 void MainWindow::SetupPortSerial()
 {
     QSettings settings(m_organizationName, m_appName);
@@ -971,9 +1079,12 @@ void MainWindow::sendtoWeb()
     default: break;
     }
 
-    QString url = "http://lab411s.esy.es/sg/rx.php?data=";
-    url+=dataSend;
-    //qDebug()<<"Data send "<<dataSend;
+    dataSend += "hello world";
+    //QString url = "192.168.7.147:8000/sg/sg-master/rx.php?data=hello world";
+    QString url="192.168.0.9:8000/?nhietdo=";
+    url.append(DATA::temp+"&doam="+DATA::hump);
+    //url+=dataSend;
+    qDebug()<<"Data send "<<dataSend << " "<<url;
     QNetworkRequest request = QNetworkRequest(QUrl(url));
     http1->get(request);
 }

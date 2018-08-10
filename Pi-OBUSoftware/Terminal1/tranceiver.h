@@ -12,6 +12,7 @@
 
 
 
+
 class Tranceiver : public QObject
 {
 Q_OBJECT
@@ -28,7 +29,9 @@ signals:
     void tempAndHum(QString);
     void receiveCompletely();
     void motionDetected(QString);
-
+    //nxt mqtt
+    void sendTandH(int,double,double);
+    //
 
 public slots:
     void readData();

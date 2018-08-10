@@ -18,4 +18,5 @@ public:
     static QString time;
 };
 
+
 #endif // DATA_H

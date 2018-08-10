@@ -107,7 +107,7 @@ void Tranceiver::readData()
                     emit receivedData(Line);
                 }
                 WriteTextAppend(LOG_FILE, Line + "***************************************\n");
-                qDebug()<< "Line:  "<< Line;
+                //qDebug()<< "Line:  "<< Line;
                 Code = Line.mid(0,3);
                 switch(CheckCode(Code)){
                 case 1: //Take photo
@@ -125,14 +125,39 @@ void Tranceiver::readData()
                                 dir.mkpath(".");
                             FileName = IMAGES_PATH + Line.mid(8,2) +"/" + d + t + ".jpg";
                         }
+                        QString  mac=Line.mid(8,2);
+                        QString time=QTime::currentTime().toString("hh-mm-ss");
+                        time.append(QDate::currentDate().toString("yyyy/MM/dd"));
                         Image = Line.mid(16, j-16);
                         my_Imgage = Line.mid(16,j-17);
                         //qDebug() << my_Imgage;
                         WriteAppend(FileName,Image);
                         DATA::img += my_Imgage;
+                        QString data_web="http://tora1996.pythonanywhere.com/?img=";
+                        //QString data_web="http://192.168.0.6:8000/get/?";
+                        http2= new QNetworkAccessManager(this);
+                        //data_web.append(Line.mid(4,j-1));
+                        //data_web.append(QString::number(temp));
+
                         emit ImageReceived(FileName);
                         if(!End.compare("FFD9")){
                             //qDebug() << "Gui anh xong roi do";
+                            //qDebug()<<"nxt:"<<DATA::img;
+                            data_web.append(DATA::img);
+                            data_web.append("&mac="+mac+"&time="+time);
+//		            c        QString id= QString::number(mac);
+//		                    data_web.append("&sensor="+id+"&time="+QTime::currentTime().toString()+' '+d);
+		                    //data_web.append(QString::number(temp));
+//		                    QNetworkRequest request = QNetworkRequest(QUrl(data_web));
+//		                    http2->get(request);
+//		                    qDebug()<<data_web<<endl;
+//                      }
+//                    qDebug()<<mac<<endl;
+//                    WriteTextAppend(HISTORY_FILE, data);
+//                    break;
+                            QNetworkRequest request = QNetworkRequest(QUrl(data_web));
+                            http2->get(request);
+                            //qDebug()<<data_web;
                             emit receivedData("Image Received Completely");
                             emit receiveCompletely();
                         }
@@ -165,10 +190,11 @@ void Tranceiver::readData()
                     double temp = (double)(td*0.01 - 39.6);
                     double rh_lind = (double)(0.0367*rhd - 0.0000015955*rhd*rhd - 2.0468);
                     double humi = (double)((temp - 25)*(0.01 + 0.00008*rhd) + rh_lind);
+                    int mac= Line.mid(8,2).toUInt(&ok);
                     if(humi > 100) humi = 100;
                     if(humi < 0) humi = 0;
                     QTime time;
-                    QString t = time.currentTime().toString("hh_mm_ss");
+                    QString t = time.currentTime().toString("hh-mm-ss");
                     QDate date;
                     QString d = date.currentDate().toString("dd/MM/yyyy");
                     QString tmp = Line.mid(8,2) + ":" + Line.mid(4,4) + ":" + QString::number(temp) + ":" + QString::number(humi);
@@ -186,8 +212,22 @@ void Tranceiver::readData()
                     DATA::temp= QString::number(temp);
                     DATA::hump= QString::number(humi);
                     emit tempAndHum(tmp);
+                    emit sendTandH(mac,temp,humi);
                     QString data = d+":"+t+":"+Line.mid(8,2) + ":" + QString::number(temp) + ":" + QString::number(humi);
-                    //qDebug() << data;
+//                    qDebug() << "data debug"<<data<<endl;
+//                    if(true){
+//                    //QString data_web="https://api.thingspeak.com/update?api_key=GRRI8J5BWT69VFHG&field2=";
+//                    QString data_web="http://tora1996.pythonanywhere.com/?";
+//                    //QString data_web="http://192.168.0.6:8000/get/?";
+//                    http2= new QNetworkAccessManager(this);
+//                    QString id= QString::number(mac);
+//                    data_web.append("temp="+QString::number(temp)+"&humi="+QString::number(humi)+"&sensor="+id+"&time="+QTime::currentTime().toString()+' '+d);
+//                    //data_web.append(QString::number(temp));
+//                    QNetworkRequest request = QNetworkRequest(QUrl(data_web));
+//                    http2->get(request);
+//                    qDebug()<<data_web<<endl;
+//                      }
+                    //qDebug()<<mac<<endl;
                     WriteTextAppend(HISTORY_FILE, data);
                     break;
                 }

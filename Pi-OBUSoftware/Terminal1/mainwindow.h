@@ -26,6 +26,7 @@
 #include <QNetworkAccessManager>
 #include "QHash"
 #include "QTime"
+#include "qtmosq.h"
 
 namespace Ui {
 class MainWindow;
@@ -117,6 +118,12 @@ private slots:
     void on_btnView_clicked();
     //////////////
     void sendtoWeb();
+    //mqtt
+    void sendMqtt();
+    void mqttConnect();
+    void connectEnabled();
+    void sendMqttTandH(int,double,double);
+    //
     void sendImageToWeb();
     void GetDataWeb();
     void sendBroadcast();
@@ -125,6 +132,10 @@ private slots:
 
     /* Chinh sua code cho UAV */
     void WriteDatatoLogfile(QString);
+    //void on_pushButton_pressed();
+
+    //void on_pushButton_clicked(bool checked);
+
 private:
     Ui::MainWindow *ui;
     Console *console;
@@ -154,6 +165,10 @@ private:
     QTimer *UAVautoSend;
     QString fileName;
     /************* UAV **********/
+    /*mqtt */
+    qtmosq* mosq = NULL;
+    //
+
 };
 
 #endif // MAINWINDOW_H
